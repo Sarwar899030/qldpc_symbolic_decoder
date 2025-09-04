@@ -1,0 +1,120 @@
+
+import random
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+# ------------------------------
+# Dictionary-Based Quantum Error Correction Framework
+# ------------------------------
+
+# Define anti-commutation relation between Pauli operators
+def anticommutes(op1, op2):
+    if op1 == op2 or op1 == 'I' or op2 == 'I':
+        return False
+    return True
+
+# Syndrome computation
+def make_syndrome(error_dict, stabilizers):
+    bits = []
+    for stab in stabilizers.values():
+        count = 0
+        for q, op in stab.items():
+            if q in error_dict:
+                for e in error_dict[q]:
+                    if anticommutes(op, e):
+                        count += 1
+        bits.append(count % 2)
+    return tuple(bits)
+
+# Apply correction
+def apply_repair(syndrome, correction_rules, error_dict):
+    plan = correction_rules.get(syndrome, {})
+    for q, ops in plan.items():
+        for op in ops:
+            if q in error_dict and op in error_dict[q]:
+                error_dict[q].remove(op)
+                if not error_dict[q]:
+                    del error_dict[q]
+    return error_dict
+
+# Evaluate Trust Flow (TF)
+def compute_tf(injected, correction):
+    correct = 0
+    total = len(correction)
+    for q, ops in correction.items():
+        if q in injected and set(ops) == set(injected[q]):
+            correct += 1
+    return correct / total if total > 0 else 1.0
+
+# Correction Path Entropy (CPE)
+def compute_cpe(candidates):
+    if not candidates:
+        return 0.0
+    probs = np.array([1/len(candidates)] * len(candidates))
+    return -np.sum(probs * np.log2(probs))
+
+# ------------------------------
+# Example Stabilizers and Rules
+# ------------------------------
+stabilizers = {
+    0: {0: 'Z', 1: 'Z'},
+    1: {1: 'Z', 2: 'Z'}
+}
+
+correction_rules = {
+    (1, 1): {1: ['X']}
+}
+
+# ------------------------------
+# Synthetic Data Simulation
+# ------------------------------
+data_records = []
+runs = 20
+for run in range(runs):
+    error_dict = {}
+    # inject random error on qubit 1 or 2
+    q = random.choice([1, 2])
+    e = random.choice(['X', 'Z'])
+    error_dict[q] = [e]
+
+    syndrome = make_syndrome(error_dict, stabilizers)
+    corrected = apply_repair(dict(error_dict), correction_rules, dict(error_dict))
+
+    XF = 1.0 if not corrected else 0.8
+    TF = compute_tf(error_dict, correction_rules.get(syndrome, {}))
+    CPE = compute_cpe([correction_rules.get(syndrome, {})])
+
+    data_records.append({
+        'Run': run + 1,
+        'Injected_Error': str(error_dict),
+        'Syndrome': str(syndrome),
+        'Correction_Action': str(correction_rules.get(syndrome, {})),
+        'Post_Error': str(corrected),
+        'XF': XF,
+        'TF': TF,
+        'CPE': CPE
+    })
+
+df = pd.DataFrame(data_records)
+csv_path = 'C:/data/symbolic_qec_results.csv'
+df.to_csv(csv_path, index=False)
+
+# ------------------------------
+# Visualization
+# ------------------------------
+plt.figure(figsize=(6, 4))
+sns.barplot(data=df, x='Run', y='XF', color='blue')
+plt.title('Explainable Fidelity (XF) per Run')
+plt.savefig('C:/data/xf_per_run.png')
+
+plt.figure(figsize=(6, 4))
+sns.barplot(data=df, x='Run', y='TF', color='green')
+plt.title('Trust Flow (TF) per Run')
+plt.savefig('C:/data/tf_per_run.png')
+
+plt.figure(figsize=(6, 4))
+sns.histplot(df['CPE'], bins=10, color='red')
+plt.title('Correction Path Entropy (CPE) Distribution')
+plt.savefig('C:/data/cpe_distribution.png')
